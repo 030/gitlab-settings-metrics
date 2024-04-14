@@ -59,7 +59,7 @@ Program created using ChatGPT 3.5 using the following input:
 
 ```bash
 pip3 install -r requirements.txt
-python3 main.py --group-id 7659975
+python3 main.py --group-id 7659975 --logging-level DEBUG
 ```
 
 ## usage
