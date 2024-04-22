@@ -7,6 +7,7 @@ import csv
 from datetime import datetime
 import glob
 import pandas as pd
+from fpdf import FPDF
 
 
 def get_project_settings(id: int, access_token: str) -> []:
@@ -163,13 +164,14 @@ def count(column_names: [], filename: str) -> []:
         logging.debug(f"Counts for {column}:")
         for value, count in value_counts.items():
             percentage = percentages[column][value]
+            formatted_percentage = round(percentage, 2)
             logging.debug(f"  {value}: {count} ({percentage:.2f}%)")
 
             row = {
                 "setting": column,
                 "value": value,
                 "count": count,
-                "percentage": percentage
+                "percentage": formatted_percentage
             }
             rows.append(row)
 
@@ -219,7 +221,8 @@ def add_rows_with_empty_total_and_percentage(filename: str):
                                             or x == '[]').sum()
     column_counts = existing_df.count()
     empty_list_percentage = (empty_list_count / column_counts) * 100
-    summary_df = pd.concat([empty_list_count, empty_list_percentage], axis=1, keys=['Count', 'Percentage']).transpose()
+    formatted_percentage = round(empty_list_percentage, 2)
+    summary_df = pd.concat([empty_list_count, formatted_percentage], axis=1, keys=['Count', 'Percentage']).transpose()
     existing_df = pd.concat([existing_df, summary_df])
     existing_df.to_csv(filename, index=False)
 
@@ -253,6 +256,44 @@ def write_csv_report(access_token: str, group_id: str, projects: []):
     combined_df.to_csv("report.csv", index=False)
 
 
+def truncate_string(string, max_width):
+    if len(string) <= max_width:
+        return string
+    else:
+        truncated_string = string[:max_width - 3] + "..."
+        return truncated_string
+
+
+def create_pdf_from_csv(csv_file, pdf_file):
+    df = pd.read_csv(csv_file)
+    pdf = FPDF(orientation='L')
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", style='B', size=8)
+    for col in df.columns:
+        cell_width = 30
+        if col == "setting":
+            cell_width = 72
+        if col == "value":
+            cell_width = 145
+        pdf.cell(cell_width, 10, col, border=1)
+    pdf.ln()
+    pdf.set_font("Arial", size=8)
+    for index, row in df.iterrows():
+        for col in df.columns:
+            cell_width = 30
+            if col == "setting":
+                cell_width = 72
+            if col == "value":
+                cell_width = 145
+            long_string = str(row[col])
+            max_width = 115
+            truncated_string = truncate_string(long_string, max_width)
+            pdf.cell(cell_width, 10, truncated_string, border=1)
+        pdf.ln()
+    pdf.output(pdf_file)
+
+
 @click.command()
 @click.option('--group-id', prompt='Enter GitLab Group ID', help='GitLab Group ID to check')
 @click.option('--archived-only', is_flag=True, help='Only archived projects')
@@ -263,6 +304,7 @@ def main(group_id, archived_only, logging_level, token_file):
     access_token = read_access_token(token_file)
     projects = get_projects(group_id, access_token, archived_only)
     write_csv_report(access_token, group_id, projects)
+    create_pdf_from_csv("report.csv", "report.pdf")
 
 
 if __name__ == "__main__":
